@@ -1,0 +1,772 @@
+@extends('index')
+@section('content')
+<style type="text/css">
+    form {
+        margin: 20px 0;
+    }
+
+    form input,
+    button {
+        padding: 5px;
+    }
+
+    table {
+        width: 100%;
+        margin-bottom: 20px;
+        border-collapse: collapse;
+    }
+
+    table,
+    th,
+    td {
+        border: 1px solid #cdcdcd;
+    }
+
+    table th,
+    table td {
+        padding: 10px;
+        text-align: left;
+    }
+
+    #header {
+        text-align: center;
+    }
+</style>
+@if(session()->get('error'))
+    <div class="alert alert-danger alert-dismissible fade-show">
+        <button type="button" class="close" data-dismiss="alert">&times;</button>
+        <b id="black">{{ session()->get('error') }}</b>
+    </div>
+    @endif
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="x_panel">
+                <div class="x_title">
+                    <h1 id="header">Penjualan Kasir</h1>
+                </div>
+                <div class="x_content">
+                    <form action="{{ url('/kasir/store') }}" method="post" class="formsub">
+                        @csrf
+                        <!-- Contents -->
+                        <br>
+                        <div class="form-row">
+                            <!-- column 1 -->
+                            <div class="form-group col-md-3">
+                                <input type="hidden" class="form-control idp" name="KodeKasir" value="{{$newID}}">
+                                <div class="form-group">
+                                    <label for="inputDate">Tanggal</label>
+                                    <div class="input-group inputDate">
+                                        <input type="text" class="form-control inputDate" name="Tanggal">
+                                        <span class="input-group-addon">
+                                            <span class="glyphicon glyphicon-calendar"></span>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inputPelanggan">Pelanggan</label>
+                                    <select class="form-control" name="KodePelanggan" required id="pelanggan">
+                                    <option value="" selected disabled hidden>- Pilih Pelanggan -</option>
+                                    @foreach($pelanggan as $pel)
+                                        <option value="{{$pel->KodePelanggan}}">{{$pel->NamaPelanggan}} | {{$pel->Alamat}}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            <!-- pembatas -->
+                            <div class="form-group col-md-1"></div>
+                            <!-- column 2 -->
+                            <div class="form-group col-md-3">
+                                <div class="form-group">
+                                    <label for="inputGudang">Gudang</label>
+                                    <select class="form-control" name="KodeLokasi" id="inputGudang">
+                                        @foreach($lokasi as $lok)
+                                        <option value="{{$lok->KodeLokasi}}">{{$lok->NamaLokasi}}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inputPelanggan">Diskon</label>
+                                    @if (Auth::user() && Auth::user()->name == 'admin')
+                                    <div class="input-group">
+                                        <input type="number" required step=0.01 oninput="updatePrice()" class="diskon form-control" name="diskon" placeholder="Rp" value="0">
+                                        <span class="input-group-addon">%</span>
+                                    </div>
+                                    @elseif(Auth::user() && Auth::user()->name != 'admin')
+                                    <div class="input-group">
+                                        <input type="number" required step=0.01 oninput="updatePrice()" class="diskon form-control" name="diskon" placeholder="Rp" readonly value="0">
+                                        <span class="input-group-addon">%</span>
+                                    </div>
+                                    @endif
+                                </div>
+                            </div>
+                            <!-- pembatas -->
+                            <div class="form-group col-md-1"></div>
+                            <!-- column 3 -->
+                            <div class="form-group col-md-3">
+                                <div class="form-group">
+                                    <label for="inputDate">Metode Pembayaran</label>
+                                    <div class="radio">
+                                        <label class="radio-inline"><input type="radio" name="metode" value="Cash" checked> Cash</label>
+                                        <label class="radio-inline"><input type="radio" name="metode" value="Transfer"> Transfer</label>
+                                        <label class="radio-inline"><input type="radio" name="metode" value="Giro"> Giro</label>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="ekspedisi">Ongkir</label>
+                                    <div class="radio">
+                                        <label class="radio-inline"><input type="radio" name="ekspedisi" value="1" onclick="eksfunc(this)"> Ya</label>
+                                        <label class="radio-inline"><input type="radio" name="ekspedisi" value="0" onclick="eksfunc(this)" checked> Tidak</label>
+                                    </div>
+                                    {{--<select class="form-control ekspedisi" onchange="eksfunc(this)" name="ekspedisi" required  required id="ekspedisi">
+                                    <option value="">- Pilih Ongkir -</option>    
+                                    <option value="1"> Ya </option>
+                                        <option value="0"> Tidak </option>
+                                    </select>--}}
+                                </div>
+                                <div class="form-group c">
+                                    <label for="Modal">Modal</label>
+                                    <input type="number" step="1" class="form-control input-modal" name="Modal" id="Modal" value="0">
+                                </div>
+                                <div class="form-group c">
+                                    <label>Tarif Pelanggan</label>
+                                    <input type="number" step="1" class="form-control input-tarifpelanggan" oninput="updatePrice()" name="TarifPelanggan" id="TarifPelanggan" value="0">
+                                </div>
+                            </div>
+                            {{--<div class="form-group">
+                                    <label for="inputMatauang">Mata Uang</label>
+                                    <select class="form-control" readonly name="KodeMataUang" id="inputMatauang" placeholder="Pilih mata uang">
+                                        @foreach($matauang as $mu)
+                                        <option value="{{$mu->KodeMataUang}}">{{$mu->NamaMataUang}}</option>
+                                        @endforeach
+                                    </select>
+                                </div>--}}
+                                {{--<div class="form-group">
+                                    <label for="inputPelanggan">PPN</label>
+                                    <select class="form-control ppn" onchange="ppnfunc(this)" name="ppn" readonly id="ppn">
+                                        <option value="tidak">Tidak</option>
+                                    </select>
+                                </div>--}}
+                                {{--<div>
+                                    <label for="inputKeterangan">Keterangan</label>
+                                    <input class="form-control" name="Keterangan" value="-" readonly id="inputKeterangan" rows="5">
+                                </div>--}}
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-12">
+                                <br><br>
+                                <div class="x_title">
+                                </div>
+                                <br>
+                                <h3 id="header">Daftar Item</h3>
+                                <a href="javascript:;" class="btn btn-primary pull-right" onclick="addrow()">
+                                    <i class="fa fa-plus" aria-hidden="true"></i>
+                                </a>
+                                <br><br><br>
+                                <input type="hidden" value="1" name="totalItem" id="totalItem">
+
+                                {{--@foreach($item as $itemData)
+                                <input type="hidden" id="{{$itemData->KodeItem}}Ket" value="{{$itemData->Keterangan}}">
+                                @foreach($datasatuan["$itemData->KodeItem"] as $dsat)
+                                <input type="hidden" id="{{$itemData->KodeItem}}{{$dsat}}" value="{{$dsat}}">
+                                @endforeach
+                                @foreach($dataharga["$itemData->KodeItem"] as $dsatuan => $dharga)
+                                <input type="hidden" id="{{$itemData->KodeItem}}{{$dsatuan}}Harga" value="{{$dharga}}">
+                                @endforeach
+                                @foreach(
+                                        $datahargagrosir["$itemData->KodeItem"] as $dsatuan => $dharga)
+                                        <input type="hidden" id="{{$itemData->KodeItem}}{{$dsatuan}}Hargagros" value="{{$dharga}}">
+                                        @endforeach
+                                @foreach(
+                                        $datahargamember["$itemData->KodeItem"] as $dsatuan => $dharga)
+                                        <input type="hidden" id="{{$itemData->KodeItem}}{{$dsatuan}}Hargamember" value="{{$dharga}}">
+                                        @endforeach     
+                                @foreach($datahargapokok["$itemData->KodeItem"] as $dsatuan => $dharga)
+                                        <input type="hidden" id="{{$itemData->KodeItem}}{{$dsatuan}}HargaPokok" value="{{$dharga}}">
+                                        @endforeach
+                                @foreach($datahargagrab["$itemData->KodeItem"] as $dsatuan => $dharga)
+                                        <input type="hidden" id="{{$itemData->KodeItem}}{{$dsatuan}}Hargagrab" value="{{$dharga}}">
+                                        @endforeach
+                                @foreach($datahargashopee["$itemData->KodeItem"] as $dsatuan => $dharga)
+                                        <input type="hidden" id="{{$itemData->KodeItem}}{{$dsatuan}}Hargashopee" value="{{$dharga}}">
+                                        @endforeach
+                                        
+                                @endforeach--}}
+                                    
+                                <table id="items" class="table">
+                                    <tr>
+                                        <td id="header" style="width:18%;">Nama Barang</td>
+                                        <td id="header" colspan="2">Harga</td>
+                                        <td id="header" style="width:12%;">Satuan</td>
+                                        <td id="header" style="width:9%;">Qty</td>
+                                        <td id="header" style="width:20%;">Keterangan</td>
+                                        <td id="header">Total</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr class="rowinput">
+                                        <td>
+                                            <select name="item[]" onchange="barang(this);" class="form-control item1 input-item">
+                                            <option value="" selected hidden disabled>- Pilih Barang -</option>
+                                            @foreach($item as $data)
+                                            <option value="{{ $data->KodeItem }}" 
+                                                data-keterangan="{{$data->Keterangan}}" 
+                                                data-satuan="{{$data->KodeSatuan}}" 
+                                                data-pokok="{{$data->HargaBeli}}" 
+                                                data-jual="{{$data->HargaJual}}" 
+                                                data-member="{{$data->HargaMember}}" 
+                                                data-grosir="{{$data->HargaGrosir}}" 
+                                                data-grab="{{$data->Grab}}" 
+                                                data-shopee="{{$data->Shopee}}" 
+                                                data-stok="{{$data->SisaStok}}"
+                                                {{$data->SisaStok <= 0 ? 'disabled' : ''}}
+                                            >{{$data->NamaItem}} {{$data->SisaStok == 0 ? '(STOK HABIS)' : ''}}</option>
+                                            @endforeach
+
+                                            {{--@foreach($barang as $brg)
+                                                @if($brg->SisaStok <= 0)
+                                                <option value="{{ $brg->KodeItem }}" disabled>{{ $brg->NamaItem }} (Stok Habis)</option>
+                                                @else
+                                                <option value="{{ $brg->KodeItem }}" data-stok="{{ $brg->SisaStok }}">{{ $brg->NamaItem }}</option>
+                                                @endif
+                                            @endforeach--}}
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <select class="form-control hrg1 input-hrg" onchange="hrg(this)">
+                                                <option value="">--Pilih Harga--</option>
+                                                <option value="pokok">Harga Pokok</option>
+                                                <option value="jual">Harga Jual</option>
+                                                <option value="member">Harga Member</option>
+                                                <option value="grosir">Harga Grosir</option>
+                                                <option value="grab">Harga Grab</option>
+                                                <option value="shopee">Harga Shopee</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="text" name="price[]" class="form-control price1 input-price" value="0" readonly>
+                                        </td>
+                                        <td>
+                                            <input type="text" name="satuan[]" class="form-control satuan1 input-satuan" readonly>
+                                            {{--<select name="satuan[]" onchange="satuan(this);" class="form-control satuan1" id="satuan-select1">
+                                                @foreach($satuan as $satuanData)
+                                                <option value="{{$satuanData->KodeSatuan}}" selected="PCS">{{$satuanData->NamaSatuan}}</option>
+                                                @endforeach
+                                            </select>--}}
+                                        </td>
+                                        <td>
+                                            <input type="number" step="0.1" oninput="qty(this)" name="qty[]" class="form-control qty1 input-qty" min="0.1" value="0" required oninvalid="alert('Qty tidak boleh 0!!')">
+                                        </td>
+                                        <td>
+                                            <input readonly type="text" class="form-control keterangan1 input-keterangan" required="" value="0">
+                                        </td>
+                                        <td>
+                                            <input readonly type="hidden" name="total[]" class="total1 input-total">
+                                            <input readonly type="text" class="form-control showtotal1 input-showtotal" value="Rp 0">
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                </table>
+                                <div class="col-md-9">
+                                   <a href="#" class="btn btn-success" data-toggle="modal" data-target="#myModal">Pembayaran</a>
+                                   <a href="javascript:;" class="btn btn-primary pull-left" onclick="addrow()">
+                                    <i class="fa fa-plus" aria-hidden="true"></i>
+                                </a>
+                                   <!-- <button type="submit" class="btn btn-danger">Batal</button> -->
+                                </div>
+                                <div class="col-md-3">
+                                    <label>Subtotal</label>
+                                    <input type="hidden" name="bef" class="befDis">
+                                    <input type="text" readonly class="form-control showbefDis" value="Rp 0">
+
+                                    <label>Ongkir</label>
+                                    <input type="hidden" name="ongkir" class="ongkir" value="0">
+                                    <input type="text" readonly class="form-control showongkir" value="Rp 0">
+
+                                    {{--<label for="inputPelanggan">Nilai PPN</label>
+                                    <input type="hidden" readonly value="0" name="ppnval" class="ppnval form-control">
+                                    <input type="text" readonly="" class="form-control showppnval" value="Rp 0,-">--}}
+
+                                    <label>Diskon</label>
+                                    <input type="hidden" name="diskonval" class="diskonval">
+                                    <input type="text" readonly class="form-control showdiskonval" value="Rp 0">
+
+                                    <label>Total</label>
+                                    <input type="hidden" name="subtotal" class="subtotal">
+                                    <input type="text" readonly class="form-control showsubtotal" value="Rp 0">
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+
+                        <!-- input hidden untuk bayar -->
+                        <input type="hidden" name="subtotalbayar" class="subtotalbayar" id="subtotalbayar">
+                        <input type="hidden" name="bayar" class="bayar" id="bayar">
+                        <input type="hidden" name="kembalian" class="kembalian" id="kembalian">
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- modal bayar -->
+<div class="modal fade" id="myModal" role="dialog">
+    <div class="modal-dialog">
+        <!-- Modal content-->
+        <div class="modal-content">
+        <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+            <h4 class="modal-title">Pembayaran Kasir</h4>
+        </div>
+        <div class="modal-body">
+            {{--<form id="formD" name="formD" action="" method="post" enctype="multipart/form-data">
+                
+            </form>--}}
+            <div class="form-group">
+                <label for="inputPelanggan">Total</label>
+                {{--<input type="text" readonly="" class="form-control showsubtotal" id="subtotal" value="0">--}}
+                <div class="input-group">
+                    <span class="input-group-addon">Rp</span>
+                    <input type="text" class="form-control showsubtotalbayar" value="0" readonly>
+                </div>
+                </div>
+                <div class="form-group">
+                <label>Bayar</label>
+                {{--<input type="text" name="bayar" class="form-control bayar" value="0" id="bayar" placeholder="">--}}
+                <div class="input-group">
+                    <span class="input-group-addon">Rp</span>
+                    <input type="number" class="form-control showbayar" id="showbayar" step="1" min="0">
+                </div>
+                </div>
+                <div class="form-group">
+                <label>Kembalian</label>
+                <div class="input-group">
+                    <span class="input-group-addon">Rp</span>
+                    <input type="text" class="form-control showkembalian" id="showkembalian" value="0" readonly> 
+                </div>
+                </div>
+                <div class="modal-footer">  
+                <button type="button" class="btn btn-success submit-formsub">simpan</button>
+                </div>
+        </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Diskon -->
+<div class="modal fade" id="modelId" tabindex="-1" role="dialog" aria-labelledby="modelTitleId" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="container-fluid">
+                    <form method="get" action="{{ url('/kasir/modalDiskon/') }}">
+                        @csrf
+                        <div class="form-group mb-3">
+                            <input type="text" placeholder="Name" id="name" class="form-control" name="name"
+                                value="pimpinan" readonly="readonly">
+                            @if ($errors->has('name'))
+                            <span class="text-danger">{{ $errors->first('name') }}</span>
+                            @endif
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <input type="password" placeholder="Password" id="password" class="form-control" name="password" required>
+                            @if ($errors->has('password'))
+                            <span class="text-danger">{{ $errors->first('password') }}</span>
+                            @endif
+                        </div>
+
+                        <div class="d-grid mx-auto">
+                            <button type="submit" class="btn btn-dark btn-block">Submit</button>
+                        </div>
+                    </form>
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+$(document).ready(function() {
+    $('.inputDate').datetimepicker({
+        defaultDate: new Date(),
+        format: 'YYYY-MM-DD'
+    });
+
+    $('.c').hide();
+
+    $('select').select2({ width: '100%' });
+    /*$('#satuan-select1').select2();
+    $('#pelanggan').select2();*/
+});
+/*var item = $(".item" + 1).val();
+var ket = $("#" + item + "Ket").val();
+$(".keterangan" + 1).val(ket);*/
+
+$('.submit-formsub').on('click', function() {
+    if (confirm('Simpan data ini?')) {
+        $('.formsub').submit();
+    }
+})
+
+/*$('.formsub').on('submit', function(event) {
+    event.preventDefault();
+    console.log($(this).serializeArray());
+    console.log($('[name="item[]"]').length);
+});*/
+
+$("#showbayar").on('input', function() {
+    var harga  = Number($("#subtotalbayar").val());
+    var jumlah = Number($(this).val());
+    $('#bayar').val(jumlah);
+
+    var total = jumlah - harga;
+    if (total < 0) {
+        $("#showkembalian").val('Jumlah uang kurang');
+    } else {
+        $('#kembalian').val(total);
+        $("#showkembalian").val(number_format(total));
+    }
+});
+
+function hrg(element) {
+    let $row = $(element).closest('tr');
+    let hga = $(element).val();
+    let trprice = $('.input-item option:selected', $row).data(hga);
+    $('.input-price', $row).val(trprice);
+    $('.input-qty', $row).val(0);
+    var qtyVal = $('.input-qty', $row).val();
+    $('.input-total', $row).val(trprice * qtyVal);
+    var formattotal = 'Rp ' + number_format(trprice * qtyVal);
+    $('.input-showtotal', $row).val(formattotal);
+};
+
+function barang(element) {
+    let $tr = $(element).closest('tr');
+    let hga = $('.input-hrg', $tr).val();
+    /*penggunaan data-* attribute, bisa lihat dokumentasinya di internet*/
+    let trprice = $('.input-item option:selected', $tr).data(hga);
+    let trsatuan = $('.input-item option:selected', $tr).data('satuan');
+    let trketerangan = $('.input-item option:selected', $tr).data('keterangan');
+    let trstok = $('.input-item option:selected', $tr).data('stok');
+    $('.input-price', $tr).val(trprice);
+    $('.input-satuan', $tr).val(trsatuan);
+    $('.input-keterangan', $tr).val(trketerangan);
+    $('.input-qty', $tr).attr('max', trstok);
+    $('.input-qty', $tr).val(0);
+    var qtyVal = $('.input-qty', $tr).val();
+    $('.input-total', $tr).val(trprice * qtyVal);
+    var formattotal = 'Rp ' + number_format(trprice * qtyVal);
+    $('.input-showtotal', $tr).val(formattotal);
+    updatePrice();
+}
+
+function qty(element) {
+    var qty = $(element).val();
+    var maxStok = Number($(element).attr('max'));
+
+    if (qty > maxStok) {
+        $(element).val(maxStok);
+    }
+
+    let $tr = $(element).closest('tr');
+    var qtyVal = $('.input-qty', $tr).val();
+    var price = $('.input-price', $tr).val();
+    $('.input-total', $tr).val(price * qtyVal);
+    var formattotal = 'Rp ' + number_format(price * qtyVal);
+    $('.input-showtotal', $tr).val(formattotal);
+    updatePrice();
+}
+
+function price(element) {
+    let $tr = $(this).closest('tr');
+    let qtyVal = $('.input-qty', $tr).val();
+    let priceVal = Number($(element).val());
+    $('.input-total', $tr).val(qtyVal * priceVal);
+    $('.input-showtotal', $tr).val('Rp '+ number_format(qtyVal * priceVal));
+    updatePrice();
+}
+
+function del(element) {
+    let $row = $(element).closest('tr');
+    $row.remove();
+    $("#totalItem").val(parseInt($("#totalItem").val()) - 1);
+    updatePrice();
+}
+
+function addrow() {
+    $('.item1').select2('destroy');
+    $('.hrg1').select2('destroy');
+    // $('#satuan-select1').select2('destroy');
+    $("#totalItem").val(parseInt($("#totalItem").val()) + 1);
+    var count = $("#totalItem").val();
+    var markup = $(".rowinput").html();
+    var res = "<tr class='tambah" + count + "'>" + markup + "</tr>";
+    res = res.replace("qty1", "qty" + count);
+    res = res.replace("item1", "item" + count);
+    // res = res.replace("item-select1", "item-select" + count);
+    res = res.replace("hrg1", "hrg" + count);
+    res = res.replace("price1", "price" + count);
+    res = res.replace("total1", "total" + count);
+    res = res.replace("showtotal1", "showtotal" + count);
+    // res = res.replace("qty(1)", "qty(" + count + ")");
+    // res = res.replace("price(1)", "price(" + count + ")");
+    // res = res.replace("barang(this,1", "barang(this," + count);
+    // res = res.replace("satuan(this,1", "satuan(this," + count);
+    res = res.replace("satuan1", "satuan" + count);
+    // res = res.replace("satuan-select1", "satuan-select" + count);
+    res = res.replace("keterangan1", "keterangan" + count);
+    res = res.replace("<td></td>", '<td><button type="button" onclick="del(this)" class="btn btn-danger"><i class="fa fa-trash"></i></button></td>');
+
+    $("#items tbody").append(res);
+    $('.item' + count).select2({ width: '100%' });
+    $('.hrg' + count).select2({ width: '100%' });
+    $('.item1').select2({ width: '100%' });
+    $('.hrg1').select2({ width: '100%' });
+    /*$('#satuan-select' + count).select2({
+        width: '100%'
+    });
+    $('#satuan-select1').select2({
+        width: '100%'
+    });
+    var item = $(".item" + count).val();
+    var ket = $("#" + item + "Ket").val();
+    $(".keterangan" + count).val(ket);*/
+}
+
+function updatePrice() {
+    var diskon = $('.diskon').val();
+
+    let subtotal = 0;
+    $('.input-total').each(function () {
+        let eachTotal = Number($(this).val());
+        subtotal = subtotal + eachTotal;
+    });
+    subtotal = Math.ceil(subtotal);
+
+    var ongkir = Number($(".input-tarifpelanggan").val());
+    let diskonval = (diskon/100) * subtotal;
+    diskonval = Math.ceil(diskonval);
+
+    let hasiltotal = subtotal + ongkir - diskonval;
+
+    $(".ongkir").val(ongkir);
+    $(".diskonval").val(diskonval);
+    $(".befDis").val(subtotal);
+    $(".subtotal").val(hasiltotal);
+    $('.subtotalbayar').val(hasiltotal);
+
+    formatongkir = 'Rp ' + number_format(ongkir);
+    formatbef = 'Rp ' + number_format(subtotal);
+    formatdisc = 'Rp ' + number_format(diskonval);
+    formattotal = 'Rp ' + number_format(hasiltotal);
+    $(".showongkir").val(formatongkir);
+    $(".showdiskonval").val(formatdisc);
+    $(".showbefDis").val(formatbef);
+    $(".showsubtotal").val(formattotal);
+    $(".showsubtotalbayar").val(number_format(hasiltotal));
+}
+
+function eksfunc(val) {
+    if (val.value == '1') {
+        $(".c").show();
+    } else {
+        $(".c").hide();
+    }
+}
+
+/*function disc() {
+    var count = $("#totalItem").val();
+    updatePrice();
+}*/
+
+/*function tp() {
+    var count = $("#totalItem").val();
+    updatePrice();
+}*/
+
+/*function barang(element, int) {
+    let stok = $('option:selected', element).attr('data-stok');
+    var ket = $("#" + element.value + "Ket").val();
+    $(".keterangan" + int).val(ket);
+    $(".price" + int).val(0);
+    $(".total" + int).val(0);
+    $(".qty" + int).val(0);
+    $(".qty" + int).attr('max', stok);
+}*/
+
+/*function qty(int) {
+    var qty = $(".qty" + int).val();
+    var maxStok = parseInt($('.qty' + int).attr('max'));
+
+    if (qty > maxStok) {
+        $(".qty" + int).val(maxStok);
+    }
+
+    var qtyVal = $(".qty" + int).val();
+
+    var item = $(".item" + int).val();
+    var sat = $(".satuan" + int).val();
+    var price = $(".price" + int).val();
+    var hga = $('#hrg').val();
+    var price = $("#" + item + sat + hga).val();
+    if (price == null) {
+        price = "Harga tidak tersedia";
+        $(".price" + int).val(price);
+        $(".total" + int).val(0);
+        updatePrice(0);
+    } else {
+        $(".price" + int).val(price);
+        $(".total" + int).val(price * qtyVal);
+        var formattotal = 'Rp ' + number_format(price * qtyVal) + ',-';
+        $(".showtotal" + int).val(formattotal);
+    }
+    var count = $("#totalItem").val();
+    updatePrice(count);
+}*/
+
+/*function price(int) {
+    var qty = $(".qty" + int).val();
+    var item = $(".item" + int).val();
+    var sat = $(".satuan" + int).val();
+    var checkprice = $("#" + item + sat + hga).val();
+    if (checkprice == null) {
+        var price = "Satuan tidak tersedia";
+        $(".price" + int).val(price);
+        $(".total" + int).val(0);
+        updatePrice(0);
+    } else {
+        var price = $(".price" + int).val();
+        $(".total" + int).val(price * qty);
+        var formattotal = 'Rp ' + number_format(price * qty) + ',-';
+        $(".showtotal" + int).val(formattotal);
+        var count = $("#totalItem").val();
+        updatePrice(count);
+    }
+}*/
+
+/*function satuan(val, int) {
+    var sat = val.value;
+    var qty = $(".qty" + int).val();
+    var item = $(".item" + int).val();
+    var price = $(".price" + int).val();
+    var price = $("#" + item + sat + hga).val();
+    if (price == null) {
+        price = "Harga tidak tersedia";
+        $(".price" + int).val(price);
+        $(".total" + int).val(0);
+        updatePrice(0);
+    } else {
+        $(".price" + int).val(price);
+        $(".total" + int).val(price * qty);
+    }
+    var count = $("#totalItem").val();
+    updatePrice(count);
+}*/
+
+/*function del(int) {
+    $(".tambah" + int).remove();
+    var count = $("#totalItem").val();
+    updatePrice(count);
+}*/
+
+/*function ppnfunc(val) {
+
+    if (val.value == 'ya') {
+        $(".a").hide();
+        $(".b").show();
+        $(".idp").val($(".b").text());
+    } else {
+        $(".a").show();
+        $(".b").hide();
+        $(".idp").val($(".a").text());
+    }
+
+    var count = $("#totalItem").val();
+    updatePrice(count);
+}*/
+
+/*function updatePrice(tot) {
+
+    $(".subtotal").val(0);
+    var diskon = 0;
+    if ($(".diskon").val() != "") {
+        diskon = parseInt($(".diskon").val());
+    }
+    for (var i = 1; i <= tot; i++) {
+        if ($(".total" + i).val() != undefined) {
+            $(".subtotal").val(parseInt($(".subtotal").val()) + parseInt($(".total" + i).val()));
+        }
+    }
+    var befDis = $(".subtotal").val();
+    diskon = diskon;
+    var ppn = $(".ppn").val();
+    if (ppn == "ya") {
+        ppn = parseInt(befDis) * 10 / 100;
+    } else {
+        ppn = parseInt(0);
+    }
+
+    var ongkir = 0;
+    if ($(".TarifPelanggan").val() != "") {
+        ongkir = parseInt($(".TarifPelanggan").val());
+    } else {
+        ongkir = 0;
+    }
+
+    $(".ppnval").val(ppn);
+    $(".ongkir").val(ongkir);
+    $(".diskonval").val(diskon);
+    $(".befDis").val(parseInt($(".subtotal").val()));
+    $(".subtotal").val(parseInt($(".subtotal").val()) + ppn + ongkir - diskon);
+
+    hasiltotal = parseInt(befDis) + ppn + parseInt(ongkir) - diskon;
+    formatppn = 'Rp ' + number_format(ppn);
+    formatongkir = 'Rp ' + number_format(ongkir);
+    formatbef = 'Rp ' + number_format(befDis);
+    formatdisc = 'Rp ' + number_format(diskon);
+    formattotal = 'Rp ' + number_format(hasiltotal);
+    $(".showppnval").val(formatppn);
+    $(".showongkir").val(formatongkir);
+    $(".showdiskonval").val(formatdisc);
+    $(".showbefDis").val(formatbef);
+    $(".showsubtotal").val(hasiltotal);
+}*/
+
+/*$('.formsub').on('submit', function(event) {
+    tot = $("#totalItem").val();
+    for (var i = 1; i <= tot; i++) {
+        if (typeof $(".qty" + i).val() === 'undefined') {} else {
+            if ($(".qty" + i).val() == 0) {
+                event.preventDefault();
+                $(".qty" + i).focus();
+            }
+        }
+    }
+});*/
+
+function number_format(number, decimals, decPoint, thousandsSep) {
+    number = (number + '').replace(/[^0-9+\-Ee.]/g, '')
+    var n = !isFinite(+number) ? 0 : +number
+    var prec = !isFinite(+decimals) ? 0 : Math.abs(decimals)
+    var sep = (typeof thousandsSep === 'undefined') ? '.' : thousandsSep
+    var dec = (typeof decPoint === 'undefined') ? ',' : decPoint
+    var s = ''
+
+    var toFixedFix = function(n, prec) {
+        var k = Math.pow(10, prec)
+        return '' + (Math.round(n * k) / k)
+            .toFixed(prec)
+    }
+
+    s = (prec ? toFixedFix(n, prec) : '' + Math.round(n)).split('.')
+    if (s[0].length > 3) {
+        s[0] = s[0].replace(/\B(?=(?:\d{3})+(?!\d))/g, sep)
+    }
+    if ((s[1] || '').length < prec) {
+        s[1] = s[1] || ''
+        s[1] += new Array(prec - s[1].length + 1).join('0')
+    }
+
+    return s.join(dec)
+}
+</script>
+@endsection

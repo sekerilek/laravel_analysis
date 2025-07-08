@@ -1,0 +1,145 @@
+@extends('index')
+@section('content')
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h1 style="text-align:center">DATA ITEM</h1>
+
+                    <!-- Alert -->
+                    @if(session()->get('created'))
+                    <div class="alert alert-success alert-dismissible fade-show">
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                        {{ session()->get('created') }}
+                    </div>
+
+                    @elseif(session()->get('edited'))
+                    <div class="alert alert-info alert-dismissible fade-show">
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                        {{ session()->get('edited') }}
+                    </div>
+
+                    @elseif(session()->get('deleted'))
+                    <div class="alert alert-danger alert-dismissible fade-show">
+                        <button type="button" class="close" data-dismiss="alert">&times;</button>
+                        {{ session()->get('deleted') }}
+                    </div>
+                    @endif
+
+                    <a href="{{ route('masteritem.create') }}" class="btn btn-success" data-function="tambah">
+                        <i class="fa fa-plus" aria-hidden="true"></i>
+                        Tambah Item
+                    </a><br><br>
+                </div>
+            </div>
+            <div class="x_panel">
+                <div class="x_body">
+                    <!-- <table class="table table-striped" id="table-karyawan">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Kode Karyawan</th>
+                                <th>Nama</th>
+                                <th>Jabatan</th>
+                                <th>Gaji Pokok</th>
+                                <th>Alamat</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table> -->
+                    <table class="table table-striped" id="table-karyawan">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Kode Kategori</th>
+                                <th>Kode Item</th>
+                                <th>Nama Item</th>
+                                <th>Kode Satuan</th>
+                                <th>Harga Jual</th>
+                                <th>Harga Member</th>
+                                <th>Harga Grosir</th>
+								<th>Harga Grab</th>
+								<th>Harga Shopee</th>
+                                <th>Tanggal Expired</th>
+                                <th data-orderable="false">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach($item as $i)
+                            <tr>
+                                <td>{{$i->KodeKategori}}</td>
+                                <td>{{$i->KodeItem}}</td>
+                                <td>{{$i->NamaItem}}</td>
+                                <td>{{$i->KodeSatuan}}</td>
+                                <td>Rp. {{number_format($i->HargaJual, 0, ',', '.')}},-</td>
+                                <td>Rp. {{number_format($i->HargaMember, 0, ',', '.')}},-</td>
+                                <td>Rp. {{number_format($i->HargaGrosir, 0, ',', '.')}},-</td>
+								<td>Rp. {{number_format($i->Grab, 0, ',', '.')}},-</td>
+								<td>Rp. {{number_format($i->Shopee, 0, ',', '.')}},-</td>
+                                <td>{{$i->TanggalExp}}</td>
+									
+                                    <form style="display:inline-block;" type="submit" action="/masteritem/{{$i->KodeItem}}/edit" method="get">
+                                        <button class="btn btn-primary btn-xs" data-function="ubah"><i class="fa fa-pencil"></i>&nbsp;Ubah</button>
+                                    </form>
+
+                                    <form style="display:inline-block;" action="/masteritem/delete/{{$i->KodeItem}}" method="get" onsubmit="return showConfirm()">
+                                        <button class="btn btn-danger btn-xs" data-function="hapus"><i class="fa fa-trash"></i>&nbsp;Hapus</button>
+                                    </form>
+                                   
+                                    <!-- <form style="display:inline-block;" action="/barcodeshow/{{$i->KodeItem}}" method="get" onsubmit="return">
+                                        <button class="btn btn-info btn-xs" data-toggle="modal" data-target="#exampleModal"><i class="fa fa-barcode"></i>&nbsp;Barcode</button>
+                                    </form> -->
+                                </td>
+                            </tr>
+                        @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal fade" id="exampleModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                     <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="exampleModalLabel">Modal titleaaaa</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    <div class="modal-body">
+                       
+                       halo ini barcode nya
+                         
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary">Save changes</button>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+    $(function() {
+        $('#table-karyawan').DataTable();
+
+        $('[data-function]').each(function() {
+            initPage('{{Auth::user()->name}}', $(this).data('function'));
+        });
+    });
+
+    function showConfirm() {
+        if (confirm("Apakah anda yakin ingin menghapus data ini?")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+</script>
+@endpush
