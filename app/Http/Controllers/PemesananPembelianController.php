@@ -1,0 +1,613 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Yajra\DataTables\DataTables;
+use Illuminate\Http\Request;
+use App\Model\pemesananpembelian;
+use App\Model\lokasi;
+use App\Model\matauang;
+use App\Model\item;
+use App\Model\supplier;
+use PDF;
+use DB;
+use Carbon\Carbon;
+
+class PemesananPembelianController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        $pemesananpembelian = pemesananpembelian::join('lokasis', 'lokasis.KodeLokasi', '=', 'pemesananpembelians.KodeLokasi')
+            ->join('matauangs', 'matauangs.KodeMataUang', '=', 'pemesananpembelians.KodeMataUang')
+            ->join('suppliers', 'suppliers.KodeSupplier', '=', 'pemesananpembelians.KodeSupplier')
+            ->select('pemesananpembelians.*', 'lokasis.NamaLokasi', 'matauangs.NamaMataUang', 'suppliers.NamaSupplier')
+            ->orderBy('pemesananpembelians.id', 'desc')
+            ->get();
+        $pemesananpembelian->all();
+        return view('pembelian.pemesananPembelian.index', compact('pemesananpembelian'));
+    }
+
+    public function filterData(Request $request)
+    {
+        $search = $request->get('name');
+        $start = $request->get('mulai');
+        $end = $request->get('sampai');
+        $mulai = $request->get('mulai');
+        $sampai = $request->get('sampai');
+        $pemesananpembelian = pemesananpembelian::join('lokasis', 'lokasis.KodeLokasi', '=', 'pemesananpembelians.KodeLokasi')
+            ->join('matauangs', 'matauangs.KodeMataUang', '=', 'pemesananpembelians.KodeMataUang')
+            ->join('suppliers', 'suppliers.KodeSupplier', '=', 'pemesananpembelians.KodeSupplier')
+            ->where('pemesananpembelians.Status', 'OPN')
+            ->where(function ($query) use ($search) {
+                $query->Where('suppliers.NamaSupplier', 'LIKE', "%$search%")
+                    ->orWhere('pemesananpembelians.KodePO', 'LIKE', "%$search%");
+            })->get();
+        if ($start && $end) {
+            $pemesananpembelian = $pemesananpembelian->whereBetween('Tanggal', [$start . ' 00:00:00', $end . ' 23:59:59']);
+        } else {
+            $pemesananpembelian->all();
+        }
+        return view('pembelian.pemesananPembelian.index', compact('pemesananpembelian', 'mulai', 'sampai'));
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        $matauang = DB::table('matauangs')->where('Status', 'OPN')->get();
+        $lokasi = DB::table('lokasis')->where('Status', 'OPN')->get();
+        $supplier = DB::table('suppliers')->where('Status', 'OPN')->get();
+        $item = DB::select("SELECT i.KodeItem, i.NamaItem, i.Keterangan 
+            FROM items i
+            where i.jenisitem = 'bahanjadi' and i.Status = 'OPN'
+            order by i.NamaItem ");
+        $satuan = DB::table('satuans')->where('Status', 'OPN')->get();
+        $last_id = DB::select('SELECT * FROM pemesananpembelians WHERE KodePO LIKE "%PO-0%" ORDER BY id DESC LIMIT 1');
+        $last_id_tax = DB::select('SELECT * FROM pemesananpembelians WHERE KodePO LIKE "%PO-1%"  ORDER BY id DESC LIMIT 1');
+
+        $year_now = date('y');
+        $month_now = date('m');
+        $date_now = date('d');
+
+        if ($last_id_tax == null) {
+            $newIDP = "PO-1" . $year_now . $month_now . "0001";
+        } else {
+            $string = $last_id_tax[0]->KodePO;
+            $id = substr($string, -4, 4);
+            $month = substr($string, -6, 2);
+            $year = substr($string, -8, 2);
+
+            if ((int) $year_now > (int) $year) {
+                $newID = "0001";
+            } else if ((int) $month_now > (int) $month) {
+                $newID = "0001";
+            } else {
+                $newID = $id + 1;
+                $newID = str_pad($newID, 4, '0', STR_PAD_LEFT);
+            }
+            $newIDP = "PO-1" . $year_now . $month_now . $newID;
+        }
+
+        if ($last_id == null) {
+            $newID = "PO-0" . $year_now . $month_now . "0001";
+        } else {
+            $string = $last_id[0]->KodePO;
+            $id = substr($string, -4, 4);
+            $month = substr($string, -6, 2);
+            $year = substr($string, -8, 2);
+
+            if ((int) $year_now > (int) $year) {
+                $newID = "0001";
+            } else if ((int) $month_now > (int) $month) {
+                $newID = "0001";
+            } else {
+                $newID = $id + 1;
+                $newID = str_pad($newID, 4, '0', STR_PAD_LEFT);
+            }
+            $newID = "PO-0" . $year_now . $month_now . $newID;
+        }
+
+        foreach ($item as $key => $value) {
+            $array_satuan = DB::table('itemkonversis')->where('KodeItem', $value->KodeItem)->pluck('KodeSatuan')->toArray();
+            $datasatuan[$value->KodeItem] = $array_satuan;
+            foreach ($array_satuan as $sat) {
+                $array_harga = DB::table('itemkonversis')->where('KodeItem', $value->KodeItem)->where('KodeSatuan', $sat)->pluck('HargaBeli')->toArray();
+                $dataharga[$value->KodeItem][$sat] = $array_harga[0];
+            }
+        }
+
+        return view('pembelian.pemesananPembelian.buat', [
+            'newID' => $newID,
+            'newIDP' => $newIDP,
+            'matauang' => $matauang,
+            'lokasi' => $lokasi,
+            'supplier' => $supplier,
+            'item' => $item,
+			'datasatuan' => $datasatuan,
+			'dataharga' => $dataharga,
+            'satuan' => $satuan,
+        ]);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        $checkppn = $request->ppn;
+        $last_id = DB::select('SELECT * FROM pemesananpembelians WHERE KodePO LIKE "%PO-0%" ORDER BY id DESC LIMIT 1');
+        $last_id_tax = DB::select('SELECT * FROM pemesananpembelians WHERE KodePO LIKE "%PO-1%" ORDER BY id DESC LIMIT 1');
+        $year_now = date('y');
+        $month_now = date('m');
+        $date_now = date('d');
+
+        if ($checkppn == 'ya') {
+            if ($last_id_tax == null) {
+                $newID = "PO-1" . $year_now . $month_now . "0001";
+            } else {
+                $string = $last_id_tax[0]->KodePO;
+                $id = substr($string, -4, 4);
+                $month = substr($string, -6, 2);
+                $year = substr($string, -8, 2);
+
+                if ((int) $year_now > (int) $year) {
+                    $newID = "0001";
+                } else if ((int) $month_now > (int) $month) {
+                    $newID = "0001";
+                } else {
+                    $newID = $id + 1;
+                    $newID = str_pad($newID, 4, '0', STR_PAD_LEFT);
+                }
+                $newID = "PO-1" . $year_now . $month_now . $newID;
+            }
+        } else {
+            if ($last_id == null) {
+                $newID = "PO-0" . $year_now . $month_now . "0001";
+            } else {
+                $string = $last_id[0]->KodePO;
+                $id = substr($string, -4, 4);
+                $month = substr($string, -6, 2);
+                $year = substr($string, -8, 2);
+
+                if ((int) $year_now > (int) $year) {
+                    $newID = "0001";
+                } else if ((int) $month_now > (int) $month) {
+                    $newID = "0001";
+                } else {
+                    $newID = $id + 1;
+                    $newID = str_pad($newID, 4, '0', STR_PAD_LEFT);
+                }
+                $newID = "PO-0" . $year_now . $month_now . $newID;
+            }
+        }
+
+        DB::table('pemesananpembelians')->insert([
+            'KodePO' => $newID,
+            'KodeLokasi' => $request->KodeLokasi,
+            'KodeMataUang' => $request->KodeMataUang,
+            'KodeSupplier' => $request->KodeSupplier,
+            'Term' => $request->Term,
+            'NoFaktur' => $request->NoFaktur,
+            'Status' => 'OPN',
+            'KodeUser' => \Auth::user()->name,
+            'PPN' => $request->ppn,
+            'NilaiPPN' => $request->ppnval,
+            'Diskon' => $request->diskon,
+            'NilaiDiskon' => $request->diskonval,
+            'Subtotal' => $request->bef,
+            'Total' => $request->subtotal,
+            'Tanggal' => $request->Tanggal,
+            'Expired' => $request->Expired,
+            'Keterangan' => $request->Keterangan,
+            'created_at' => \Carbon\Carbon::now(),
+            'updated_at' => \Carbon\Carbon::now(),
+        ]);
+
+        $items = $request->item;
+        $qtys = $request->qty;
+        $prices = $request->price;
+        $totals = $request->total;
+        $satuans = $request->satuan;
+        $nomer = 0;
+        foreach ($items as $key => $value) {
+            $nomer++;
+            DB::table('pemesananpembeliandetails')->insert([
+                'KodePO' => $newID,
+                'KodeItem' => $items[$key],
+                'Qty' => $qtys[$key],
+                'Harga' => $prices[$key],
+                'KodeSatuan' => $satuans[$key],
+                'NoUrut' => $nomer,
+                'Subtotal' => $totals[$key],
+                'created_at' => \Carbon\Carbon::now(),
+                'updated_at' => \Carbon\Carbon::now(),
+            ]);
+        }
+
+        DB::table('eventlogs')->insert([
+            'KodeUser' => \Auth::user()->name,
+            'Tanggal' => \Carbon\Carbon::now(),
+            'Jam' => \Carbon\Carbon::now()->format('H:i:s'),
+            'Keterangan' => 'Tambah pemesanan pembelian ' . $newID,
+            'Tipe' => 'OPN',
+            'created_at' => \Carbon\Carbon::now(),
+            'updated_at' => \Carbon\Carbon::now(),
+        ]);
+
+        $pesan = 'PO ' . $newID . ' berhasil ditambahkan';
+        return redirect('/popembelian')->with(['created' => $pesan]);
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        $data = DB::select("SELECT a.KodePO, a.Tanggal, a.Expired, b.NamaMataUang, c.NamaLokasi, d.NamaSupplier, a.Keterangan, a.term, a.NoFaktur, a.Diskon, a.NilaiDiskon, a.PPN, a.NilaiPPN, a.Subtotal, a.Total, a.Status from pemesananpembelians a 
+            inner join matauangs b on b.KodeMataUang = a.KodeMataUang
+            inner join lokasis c on c.KodeLokasi = a.KodeLokasi
+            inner join suppliers d on d.KodeSupplier = a.KodeSupplier
+            where a.KodePO ='" . $id . "' limit 1")[0];
+        
+        $items = DB::select("SELECT a.Qty, b.NamaItem, d.NamaSatuan, a.Harga, a.Subtotal, b.Keterangan  from pemesananpembeliandetails a 
+            inner join items b on a.KodeItem = b.KodeItem
+            inner join itemkonversis c on c.KodeItem = a.KodeItem 
+            inner join satuans d on c.KodeSatuan = d.KodeSatuan
+            where a.KodePO ='" . $id . "' ");
+
+        $OPN = true;
+        $data->Tanggal = Carbon::parse($data->Tanggal)->format('d-m-Y');
+        return view('pembelian.pemesananPembelian.lihat', compact('data', 'id', 'items', 'OPN'));
+    }
+
+    public function lihat($id)
+    {
+        $data = DB::select("SELECT a.KodePO, a.Tanggal, a.Expired, b.NamaMataUang, c.NamaLokasi, d.NamaSupplier, a.Keterangan, a.term, a.NoFaktur, a.Diskon, a.NilaiDiskon, a.PPN, a.NilaiPPN, a.Subtotal, a.Total from pemesananpembelians a 
+            inner join matauangs b on b.KodeMataUang = a.KodeMataUang
+            inner join lokasis c on c.KodeLokasi = a.KodeLokasi
+            inner join suppliers d on d.KodeSupplier = a.KodeSupplier
+            where a.KodePO ='" . $id . "' limit 1")[0];
+
+        $items = DB::select("SELECT a.Qty, b.NamaItem, d.NamaSatuan, a.Harga, a.Subtotal, b.Keterangan  from pemesananpembeliandetails a 
+            inner join items b on a.KodeItem = b.KodeItem
+            inner join itemkonversis c on c.KodeItem = a.KodeItem 
+            inner join satuans d on c.KodeSatuan = d.KodeSatuan
+            where a.KodePO ='" . $id . "' ");
+
+        $OPN = false;
+        $data->Tanggal = Carbon::parse($data->Tanggal)->format('d-m-Y');
+        return view('pembelian.pemesananPembelian.lihat', compact('data', 'id', 'items', 'OPN'));
+    }
+
+    public function print($id)
+    {
+        $data = DB::select("SELECT a.KodePO, a.Tanggal, a.Expired, b.NamaMataUang, c.NamaLokasi, d.NamaSupplier, a.Keterangan, a.term, a.NoFaktur, a.Diskon, a.NilaiDiskon, a.PPN, a.NilaiPPN, a.Subtotal, a.Total from pemesananpembelians a 
+            inner join matauangs b on b.KodeMataUang = a.KodeMataUang
+            inner join lokasis c on c.KodeLokasi = a.KodeLokasi
+            inner join suppliers d on d.KodeSupplier = a.KodeSupplier
+            where a.KodePO ='" . $id . "' limit 1");
+
+        $items = DB::select("SELECT a.KodeItem, a.Qty, b.NamaItem, d.NamaSatuan, a.Harga, a.Subtotal, b.Keterangan, d.KodeSatuan
+            from pemesananpembeliandetails a 
+            inner join items b on a.KodeItem = b.KodeItem
+            inner join itemkonversis c on c.KodeItem = a.KodeItem 
+            inner join satuans d on c.KodeSatuan = d.KodeSatuan
+            where a.KodePO ='" . $id . "' ");
+
+        $jml = 0;
+        foreach ($items as $value) {
+            $jml += $value->Qty;
+        }
+        $data[0]->Tanggal = Carbon::parse($data[0]->Tanggal)->format('d/m/Y');
+
+        $pdf = PDF::loadview('pembelian.pemesananPembelian.print', compact('data', 'id', 'items', 'jml'));
+
+        DB::table('eventlogs')->insert([
+            'KodeUser' => \Auth::user()->name,
+            'Tanggal' => \Carbon\Carbon::now(),
+            'Jam' => \Carbon\Carbon::now()->format('H:i:s'),
+            'Keterangan' => 'Print pemesanan pembelian ' . $id,
+            'Tipe' => 'OPN',
+            'created_at' => \Carbon\Carbon::now(),
+            'updated_at' => \Carbon\Carbon::now(),
+        ]);
+
+        return $pdf->download('PemesananPembelian_' . $id . '.pdf');
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        $matauang = DB::table('matauangs')->where('Status', 'OPN')->get();
+        $lokasi = DB::table('lokasis')->where('Status', 'OPN')->get();
+        $supplier = DB::table('suppliers')->where('Status', 'OPN')->get();
+        $po = DB::select("SELECT a.KodePO, a.Tanggal, a.Expired, a.KodeMataUang, a.KodeLokasi, a.KodeSupplier, b.NamaMataUang, c.NamaLokasi, d.NamaSupplier, a.Keterangan, a.term, a.NoFaktur, a.Diskon, a.NilaiDiskon, a.PPN, a.NilaiPPN, a.Subtotal, a.Total
+            from pemesananpembelians a 
+            inner join matauangs b on b.KodeMataUang = a.KodeMataUang
+            inner join lokasis c on c.KodeLokasi = a.KodeLokasi
+            inner join suppliers d on d.KodeSupplier = a.KodeSupplier
+            where a.KodePO ='" . $id . "' limit 1")[0];
+        $itemlist = DB::select("SELECT i.KodeItem, i.NamaItem, i.Keterangan 
+            FROM items i
+            where i.jenisitem = 'bahanjadi'
+            GROUP BY i.NamaItem
+        ");
+        $items = DB::select("SELECT DISTINCT a.Qty,a.KodeItem,a.KodeSatuan,b.NamaItem,d.NamaSatuan, a.Harga, a.Subtotal, b.Keterangan  
+            from pemesananpembeliandetails a
+            inner join items b on a.KodeItem = b.KodeItem
+            inner join itemkonversis c on c.KodeItem=a.KodeItem
+            inner join satuans  d on d.KodeSatuan=a.KodeSatuan
+            where a.KodePO ='" . $id . "' ");
+        $itemcount = count($items);
+
+        $satuan = DB::table('satuans')->where('Status', 'OPN')->get();
+        foreach ($itemlist as $key => $value) {
+            $array_satuan = DB::table('itemkonversis')->where('KodeItem', $value->KodeItem)->pluck('KodeSatuan')->toArray();
+            $datasatuan[$value->KodeItem] = $array_satuan;
+            foreach ($array_satuan as $sat) {
+                $array_harga = DB::table('itemkonversis')->where('KodeItem', $value->KodeItem)->where('KodeSatuan', $sat)->pluck('HargaBeli')->toArray();
+                $dataharga[$value->KodeItem][$sat] = $array_harga[0];
+            }
+        }
+        $po->Tanggal = Carbon::parse($po->Tanggal)->format('Y-m-d');
+        return view('pembelian.pemesananPembelian.edit', compact('po', 'id', 'items', 'lokasi', 'supplier', 'matauang', 'satuan', 'dataharga', 'datasatuan', 'itemlist', 'itemcount'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id)
+    {
+        DB::table('pemesananpembelians')
+            ->where('KodePO', $request->KodePO)
+            ->update([
+                'Tanggal' => $request->Tanggal,
+                'Expired' => $request->Expired,
+                'KodeLokasi' => $request->KodeLokasi,
+                'KodeMataUang' => $request->KodeMataUang,
+                'KodeSupplier' => $request->KodeSupplier,
+                'Term' => $request->Term,
+                'Keterangan' => $request->Keterangan,
+                'NoFaktur' => $request->NoFaktur,
+                'KodeUser' => \Auth::user()->name,
+                'Total' => $request->subtotal,
+                'PPN' => $request->ppn,
+                'NilaiPPN' => $request->ppnval,
+                'Diskon' => $request->diskon,
+                'NilaiDiskon' => $request->diskonval,
+                'Subtotal' => $request->bef,
+                'updated_at' => \Carbon\Carbon::now(),
+            ]);
+
+        $items = $request->item;
+        $qtys = $request->qty;
+        $prices = $request->price;
+        $totals = $request->total;
+        $satuans = $request->satuan;
+        $itemcount = $request->itemcount;
+        $nomer = 0;
+        foreach ($items as $key => $value) {
+            $nomer++;
+            if ($nomer > $itemcount) {
+                DB::table('pemesananpembeliandetails')->insert([
+                    'KodePO' => $request->KodePO,
+                    'KodeItem' => $items[$key],
+                    'Qty' => $qtys[$key],
+                    'Harga' => $prices[$key],
+                    'KodeSatuan' => $satuans[$key],
+                    'NoUrut' => $nomer,
+                    'Subtotal' => $totals[$key],
+                    'created_at' => \Carbon\Carbon::now(),
+                    'updated_at' => \Carbon\Carbon::now(),
+                ]);
+            } else {
+                DB::table('pemesananpembeliandetails')
+                    ->where('KodePO', $request->KodePO)
+                    ->where('NoUrut', $nomer)
+                    ->update([
+                        'KodeItem' => $items[$key],
+                        'Qty' => $qtys[$key],
+                        'Harga' => $prices[$key],
+                        'KodeSatuan' => $satuans[$key],
+                        'NoUrut' => $nomer,
+                        'Subtotal' => $totals[$key],
+                        'updated_at' => \Carbon\Carbon::now(),
+                    ]);
+            }
+        }
+
+        DB::table('eventlogs')->insert([
+            'KodeUser' => \Auth::user()->name,
+            'Tanggal' => \Carbon\Carbon::now(),
+            'Jam' => \Carbon\Carbon::now()->format('H:i:s'),
+            'Keterangan' => 'Update pemesanan pembelian ' . $request->KodePO,
+            'Tipe' => 'OPN',
+            'created_at' => \Carbon\Carbon::now(),
+            'updated_at' => \Carbon\Carbon::now(),
+        ]);
+
+        $pesan = 'PO ' . $request->KodePO . ' berhasil diupdate';
+        return redirect('/popembelian')->with(['edited' => $pesan]);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        DB::table('pemesananpembelians')->where('KodePO', $id)->update([
+            'Status' => 'DEL'
+        ]);
+
+        DB::table('eventlogs')->insert([
+            'KodeUser' => \Auth::user()->name,
+            'Tanggal' => \Carbon\Carbon::now(),
+            'Jam' => \Carbon\Carbon::now()->format('H:i:s'),
+            'Keterangan' => 'Hapus pemesanan pembelian ' . $id,
+            'Tipe' => 'OPN',
+            'created_at' => \Carbon\Carbon::now(),
+            'updated_at' => \Carbon\Carbon::now(),
+        ]);
+
+        $pesan = 'PO ' . $id . ' berhasil dihapus';
+        return redirect('/popembelian')->with(['deleted' => $pesan]);
+    }
+
+    public function confirm(Request $request, $id)
+    {
+        DB::table('pemesananpembelians')
+            ->where('KodePO', $id)
+            ->update(['Status' => "CFM"]);
+
+        DB::table('eventlogs')->insert([
+            'KodeUser' => \Auth::user()->name,
+            'Tanggal' => \Carbon\Carbon::now(),
+            'Jam' => \Carbon\Carbon::now()->format('H:i:s'),
+            'Keterangan' => 'Konfirmasi pemesanan pembelian ' . $id,
+            'Tipe' => 'OPN',
+            'created_at' => \Carbon\Carbon::now(),
+            'updated_at' => \Carbon\Carbon::now(),
+        ]);
+
+        $pesan = 'PO ' . $id . ' berhasil dikonfirmasi';
+        return redirect('/pokonfirmasi')->with(['created' => $pesan]);
+    }
+
+    public function cancel(Request $request, $id)
+    {
+        DB::table('pemesananpembelians')
+            ->where('KodePO', $id)
+            ->update(['Status' => "DEL"]);
+
+        DB::table('eventlogs')->insert([
+            'KodeUser' => \Auth::user()->name,
+            'Tanggal' => \Carbon\Carbon::now(),
+            'Jam' => \Carbon\Carbon::now()->format('H:i:s'),
+            'Keterangan' => 'Batal pemesanan pembelian ' . $id,
+            'Tipe' => 'OPN',
+            'created_at' => \Carbon\Carbon::now(),
+            'updated_at' => \Carbon\Carbon::now(),
+        ]);
+
+        return redirect('/popembelian');
+    }
+
+    public function konfirmasiPembelian()
+    {
+        $pemesananpembelian = pemesananpembelian::join('lokasis', 'lokasis.KodeLokasi', '=', 'pemesananpembelians.KodeLokasi')
+            ->join('matauangs', 'matauangs.KodeMataUang', '=', 'pemesananpembelians.KodeMataUang')
+            ->join('suppliers', 'suppliers.KodeSupplier', '=', 'pemesananpembelians.KodeSupplier')
+            ->select('pemesananpembelians.*', 'lokasis.NamaLokasi', 'matauangs.NamaMataUang', 'suppliers.NamaSupplier')
+            ->orderBy('pemesananpembelians.id', 'desc')
+            ->get();
+        $pemesananpembelian = $pemesananpembelian->where('Status', 'CFM');
+        $pemesananpembelian->all();
+        $filter = false;
+        return view('pembelian.pemesananPembelian.konfirmasi', compact('pemesananpembelian', 'filter'));
+    }
+
+    public function batalPembelian()
+    {
+        $pemesananpembelian = pemesananpembelian::join('lokasis', 'lokasis.KodeLokasi', '=', 'pemesananpembelians.KodeLokasi')
+            ->join('matauangs', 'matauangs.KodeMataUang', '=', 'pemesananpembelians.KodeMataUang')
+            ->join('suppliers', 'suppliers.KodeSupplier', '=', 'pemesananpembelians.KodeSupplier')
+            ->select('pemesananpembelians.*', 'lokasis.NamaLokasi', 'matauangs.NamaMataUang', 'suppliers.NamaSupplier')
+            ->orderBy('pemesananpembelians.id', 'desc')
+            ->get();
+        $pemesananpembelian = $pemesananpembelian->where('Status', 'DEL');
+        $pemesananpembelian->all();
+        $filter = false;
+        return view('pembelian.pemesananPembelian.konfirmasi', compact('pemesananpembelian', 'filter'));
+    }
+
+    public function diterimaPembelian()
+    {
+        $pemesananpembelian = pemesananpembelian::join('lokasis', 'lokasis.KodeLokasi', '=', 'pemesananpembelians.KodeLokasi')
+            ->join('matauangs', 'matauangs.KodeMataUang', '=', 'pemesananpembelians.KodeMataUang')
+            ->join('suppliers', 'suppliers.KodeSupplier', '=', 'pemesananpembelians.KodeSupplier')
+            ->select('pemesananpembelians.*', 'lokasis.NamaLokasi', 'matauangs.NamaMataUang', 'suppliers.NamaSupplier')
+            ->orderBy('pemesananpembelians.id', 'desc')
+            ->get();
+        $pemesananpembelian = $pemesananpembelian->where('Status', 'CLS');
+        $pemesananpembelian->all();
+        $filter = false;
+        return view('pembelian.pemesananPembelian.konfirmasi', compact('pemesananpembelian', 'filter'));
+    }
+
+    public function konfirmasiPembelianFilter(Request $request)
+    {
+        $po = pemesananpembelian::join('lokasis', 'lokasis.KodeLokasi', '=', 'pemesananpembelians.KodeLokasi')
+            ->join('matauangs', 'matauangs.KodeMataUang', '=', 'pemesananpembelians.KodeMataUang')
+            ->join('suppliers', 'suppliers.KodeSupplier', '=', 'pemesananpembelians.KodeSupplier')
+            ->select('pemesananpembelians.*', 'lokasis.NamaLokasi', 'matauangs.NamaMataUang', 'suppliers.NamaSupplier')
+            ->orderBy('pemesananpembelians.id', 'desc')
+            ->get();
+        $hasil1 = $po->where('Status', 'CFM');
+        $hasil1->all();
+        $start = $request->get('start');
+        $end = $request->get('end');
+        $pemesananpembelian = $hasil1->whereBetween('Tanggal', [$start . ' 00:00:01', $end . ' 23:59:59']);
+        $pemesananpembelian->all();
+        return view('pembelian.pemesananPembelian.konfirmasi', compact('pemesananpembelian', 'filter', 'start', 'finish'));
+    }
+
+    public function diterimaPembelianFilter(Request $request)
+    {
+        $po = pemesananpembelian::join('lokasis', 'lokasis.KodeLokasi', '=', 'pemesananpembelians.KodeLokasi')
+            ->join('matauangs', 'matauangs.KodeMataUang', '=', 'pemesananpembelians.KodeMataUang')
+            ->join('suppliers', 'suppliers.KodeSupplier', '=', 'pemesananpembelians.KodeSupplier')
+            ->select('pemesananpembelians.*', 'lokasis.NamaLokasi', 'matauangs.NamaMataUang', 'suppliers.NamaSupplier')
+            ->orderBy('pemesananpembelians.id', 'desc')
+            ->get();
+        $hasil1 = $po->where('Status', 'CLS');
+        $hasil1->all();
+        $start = $request->get('start');
+        $end = $request->get('end');
+        $pemesananpembelian = $hasil1->whereBetween('Tanggal', [$start . ' 00:00:01', $end . ' 23:59:59']);
+        $pemesananpembelian->all();
+        return view('pembelian.pemesananPembelian.diterima', compact('pemesananpembelian', 'filter', 'start', 'finish'));
+    }
+
+    public function batalPembelianFilter(Request $request)
+    {
+        $po = pemesananpembelian::join('lokasis', 'lokasis.KodeLokasi', '=', 'pemesananpembelians.KodeLokasi')
+            ->join('matauangs', 'matauangs.KodeMataUang', '=', 'pemesananpembelians.KodeMataUang')
+            ->join('suppliers', 'suppliers.KodeSupplier', '=', 'pemesananpembelians.KodeSupplier')
+            ->select('pemesananpembelians.*', 'lokasis.NamaLokasi', 'matauangs.NamaMataUang', 'suppliers.NamaSupplier')
+            ->orderBy('pemesananpembelians.id', 'desc')
+            ->get();
+        $hasil1 = $po->where('Status', 'CLS');
+        $hasil1->all();
+        $start = $request->get('start');
+        $end = $request->get('end');
+        $pemesananpembelian = $hasil1->whereBetween('Tanggal', [$start . ' 00:00:01', $end . ' 23:59:59']);
+        $pemesananpembelian->all();
+        return view('pembelian.pemesananPembelian.batal', compact('pemesananpembelian', 'filter', 'start', 'finish'));
+    }
+}

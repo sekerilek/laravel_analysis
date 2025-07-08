@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use DB;
+use App\Model\kasbank;
+use PDF;
+
+class BukuKasBesarController extends Controller
+{
+    public function index()
+    {
+        $year_now = date('Y');
+        $kas = DB::select("SELECT k.*
+            from kasbanks k
+            WHERE YEAR(k.Tanggal) = '" . $year_now . "'
+            AND k.Status = 'CFM'
+            AND (k.Tipe = 'AR' or k.Tipe = 'AP' or k.Tipe = 'KS' or k.Tipe = 'RKS') 
+            order by k.Tanggal ");
+        $filter = false;
+        return view('laporan.bukukasbesar.index', compact('kas', 'filter', 'year_now'));
+    }
+
+    public function show(Request $request)
+    {
+        $year_now = date('Y');
+        $kas = DB::select("SELECT k.*
+            from kasbanks k
+            WHERE YEAR(k.Tanggal) = '" . $year_now . "'
+            AND k.Status = 'CFM'
+            AND (k.Tipe = 'AR' or k.Tipe = 'AP' or k.Tipe = 'KS' or k.Tipe = 'RKS') 
+            order by k.Tanggal, k.KodeKasBank ");
+        $hutang = DB::table('kasbanks')->where('Tipe', 'AP')->whereYear('Tanggal', $year_now)->select(DB::raw('SUM(Total) as total_hutang'))->first()->total_hutang;
+        $piutang = DB::table('kasbanks')->where('Tipe', 'AR')->whereYear('Tanggal', $year_now)->select(DB::raw('SUM(Total) as total_piutang'))->first()->total_piutang;
+        $kasir = DB::table('kasbanks')->where('Tipe', 'KS')->whereYear('Tanggal', $year_now)->select(DB::raw('SUM(Total) as total_kasir'))->first()->total_kasir;
+        $return = DB::table('kasbanks')->where('Tipe', 'RKS')->whereYear('Tanggal', $year_now)->select(DB::raw('SUM(Total) as total_return'))->first()->total_return;
+        $filter = true;
+        $no = 1;
+        return view('laporan.bukukasbesar.index', compact('kas', 'filter', 'year_now', 'no', 'hutang', 'piutang', 'kasir', 'return'));
+    }
+
+    public function filter(Request $request)
+    {
+        $year_now = date('Y');
+        $kas = DB::select("SELECT k.*
+            from kasbanks k
+            WHERE MONTH(k.Tanggal) = '" . $request->month . "' AND YEAR(k.Tanggal) = '" . $request->year . "'
+            AND k.Status = 'CFM'
+            AND (k.Tipe = 'AR' or k.Tipe = 'KS')
+            order by k.Tanggal, k.KodeKasBank ");
+        $hutang = DB::table('kasbanks')->where('Tipe', 'AP')->whereMonth('Tanggal', $request->month)->whereYear('Tanggal', $request->year)->select(DB::raw('SUM(Total) as total_hutang'))->first()->total_hutang;
+        $piutang = DB::table('kasbanks')->where('Tipe', 'AR')->whereMonth('Tanggal', $request->month)->whereYear('Tanggal', $request->year)->select(DB::raw('SUM(Total) as total_piutang'))->first()->total_piutang;
+        $kasir = DB::table('kasbanks')->where('Tipe', 'KS')->whereMonth('Tanggal', $request->month)->whereYear('Tanggal', $request->year)->select(DB::raw('SUM(Total) as total_kasir'))->first()->total_kasir;
+        $return = DB::table('kasbanks')->where('Tipe', 'RKS')->whereMonth('Tanggal', $request->month)->whereYear('Tanggal', $request->year)->select(DB::raw('SUM(Total) as total_return'))->first()->total_return;
+        $filter = true;
+        $no = 1;
+        //dd($hutang,$piutang,$kasir,$return);
+        return view('laporan.bukukasbesar.index', compact('kas', 'filter', 'year_now', 'no', 'hutang', 'piutang', 'kasir', 'return'));
+    }
+    public function filterdate(Request $request)
+    {
+        $year_now = date('Y');
+        $filter = true;
+        $no = 1;
+        $start = $request->get('mulai');
+        $end = $request->get('sampai');
+        $mulai = $request->get('mulai');
+        $sampai = $request->get('sampai');
+        $kas = DB::select("SELECT k.*
+        from kasbanks k
+        WHERE k.Tanggal BETWEEN '" . $request->start . "' AND '" . $request->end . "'
+        AND k.Status = 'CFM'
+        AND (k.Tipe = 'AR' or k.Tipe = 'KS')
+        order by k.Tanggal, k.KodeKasBank ");
+        $hutang = DB::table('kasbanks')->where('Tipe', 'AP')->where('Tanggal', $request->start)->where('Tanggal', $request->end)->select(DB::raw('SUM(Total) as total_hutang'))->first()->total_hutang;
+        $piutang = DB::table('kasbanks')->where('Tipe', 'AR')->where('Tanggal', $request->start)->where('Tanggal', $request->end)->select(DB::raw('SUM(Total) as total_piutang'))->first()->total_piutang;
+        $kasir = DB::table('kasbanks')->where('Tipe', 'KS')->where('Tanggal', $request->start)->where('Tanggal', $request->end)->select(DB::raw('SUM(Total) as total_kasir'))->first()->total_kasir;
+        $return = DB::table('kasbanks')->where('Tipe', 'RKS')->where('Tanggal', $request->start)->where('Tanggal', $request->end)->select(DB::raw('SUM(Total) as total_return'))->first()->total_return;
+        //dd($kas,$hutang,$piutang);
+        // $penjualans = DB::select("SELECT sj.Tanggal, sj.KodeSuratJalan, sj.KodeSO, sum(sjd.Qty) as total, i.NamaItem, sjd.KodeSatuan 
+        //         FROM suratjalandetails sjd
+        //         INNER JOIN suratjalans sj
+        //         INNER JOIN items i
+        //         INNER JOIN pelanggans p on p.KodePelanggan = sj.KodePelanggan
+        //         WHERE sj.Tanggal BETWEEN '" . $request->start . "' AND '" . $request->end . "'
+        //         AND sj.KodeSuratJalan = sjd.KodeSuratJalan
+        //         AND p.KodePelanggan ='" . $request->pelanggan . "'
+        //         AND i.KodeItem = sjd.KodeItem
+        //         GROUP BY sj.KodeSuratJalan, sj.KodeSO, sjd.KodeItem, sjd.KodeSatuan  
+        //         ORDER BY sj.Tanggal DESC
+        //     ");
+            return view('laporan.bukukasbesar.index', compact('kas', 'filter', 'year_now', 'no', 'hutang', 'piutang', 'kasir', 'return'));
+    }
+}
